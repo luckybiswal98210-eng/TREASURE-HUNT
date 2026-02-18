@@ -2,13 +2,6 @@ services:
   - type: web
     name: campus-hunt-form
     runtime: node
-    plan: starter
+    plan: free
     buildCommand: "npm install"
     startCommand: "npm start"
-    envVars:
-      - key: STORAGE_ROOT
-        value: /var/data
-    disk:
-      name: campus-hunt-storage
-      mountPath: /var/data
-      sizeGB: 1
