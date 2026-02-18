@@ -2,6 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
+const { MongoClient } = require('mongodb');
 
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -9,6 +10,9 @@ const STORAGE_ROOT = process.env.STORAGE_ROOT || ROOT;
 const DATA_DIR = path.join(STORAGE_ROOT, 'data');
 const UPLOADS_DIR = path.join(STORAGE_ROOT, 'uploads');
 const SUBMISSIONS_FILE = path.join(DATA_DIR, 'submissions.json');
+const MONGODB_URI = process.env.MONGODB_URI || '';
+const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'campus_hunt';
+const MONGODB_COLLECTION = process.env.MONGODB_COLLECTION || 'submissions';
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -24,6 +28,10 @@ const MIME_TYPES = {
 };
 
 const DATA_URL_PATTERN = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/;
+const USE_MONGO = Boolean(MONGODB_URI);
+
+let mongoClient;
+let submissionsCollection;
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -38,6 +46,15 @@ function sanitizeFilePart(value) {
 }
 
 async function ensureStorage() {
+  if (USE_MONGO) {
+    mongoClient = new MongoClient(MONGODB_URI);
+    await mongoClient.connect();
+    submissionsCollection = mongoClient.db(MONGODB_DB_NAME).collection(MONGODB_COLLECTION);
+    await submissionsCollection.createIndex({ id: 1 }, { unique: true });
+    await submissionsCollection.createIndex({ teamId: 1 });
+    return;
+  }
+
   await fsp.mkdir(DATA_DIR, { recursive: true });
   await fsp.mkdir(UPLOADS_DIR, { recursive: true });
 
@@ -49,13 +66,30 @@ async function ensureStorage() {
 }
 
 async function readSubmissions() {
+  if (USE_MONGO) {
+    return submissionsCollection.find({}).sort({ id: 1 }).toArray();
+  }
+
   const raw = await fsp.readFile(SUBMISSIONS_FILE, 'utf-8');
   const parsed = JSON.parse(raw || '[]');
   return Array.isArray(parsed) ? parsed : [];
 }
 
 async function writeSubmissions(items) {
+  if (USE_MONGO) {
+    return;
+  }
   await fsp.writeFile(SUBMISSIONS_FILE, JSON.stringify(items, null, 2), 'utf-8');
+}
+
+async function nextSubmissionId() {
+  if (USE_MONGO) {
+    const latest = await submissionsCollection.findOne({}, { sort: { id: -1 }, projection: { id: 1 } });
+    return (latest?.id || 0) + 1;
+  }
+
+  const items = await readSubmissions();
+  return items.length + 1;
 }
 
 async function parseJsonBody(req, maxBytes = 15 * 1024 * 1024) {
@@ -120,11 +154,9 @@ async function handleSubmission(req, res) {
   const filePath = path.join(UPLOADS_DIR, fileName);
 
   try {
-    await fsp.writeFile(filePath, Buffer.from(base64Data, 'base64'));
-
-    const submissions = await readSubmissions();
+    const id = await nextSubmissionId();
     const record = {
-      id: submissions.length + 1,
+      id,
       teamId: String(payload.teamId),
       teamName: String(payload.teamName),
       questionId: Number(payload.questionId),
@@ -133,12 +165,19 @@ async function handleSubmission(req, res) {
       isCorrect: payload.isCorrect !== false,
       submittedAt: String(payload.timestamp || now.toLocaleTimeString()),
       createdAt: now.toISOString(),
-      originalPhotoName: String(payload.photoName || 'camera-photo'),
-      photoPath: `/uploads/${fileName}`
+      originalPhotoName: String(payload.photoName || 'camera-photo')
     };
 
-    submissions.push(record);
-    await writeSubmissions(submissions);
+    if (USE_MONGO) {
+      record.photoPath = String(payload.photoDataUrl);
+      await submissionsCollection.insertOne(record);
+    } else {
+      await fsp.writeFile(filePath, Buffer.from(base64Data, 'base64'));
+      record.photoPath = `/uploads/${fileName}`;
+      const submissions = await readSubmissions();
+      submissions.push(record);
+      await writeSubmissions(submissions);
+    }
 
     return sendJson(res, 201, { success: true, record });
   } catch (error) {
@@ -149,12 +188,18 @@ async function handleSubmission(req, res) {
 
 async function handleGetSubmissions(req, res, urlObj) {
   try {
-    const submissions = await readSubmissions();
     const filterTeamId = urlObj.searchParams.get('teamId');
+    let filtered;
 
-    const filtered = filterTeamId
-      ? submissions.filter((item) => String(item.teamId) === String(filterTeamId))
-      : submissions;
+    if (USE_MONGO) {
+      const query = filterTeamId ? { teamId: String(filterTeamId) } : {};
+      filtered = await submissionsCollection.find(query).sort({ id: 1 }).toArray();
+    } else {
+      const submissions = await readSubmissions();
+      filtered = filterTeamId
+        ? submissions.filter((item) => String(item.teamId) === String(filterTeamId))
+        : submissions;
+    }
 
     return sendJson(res, 200, filtered);
   } catch (error) {
