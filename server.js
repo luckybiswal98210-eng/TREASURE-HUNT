@@ -41,10 +41,10 @@ function sendJson(res, statusCode, payload) {
 
 function buildDefaultCredentials() {
   const teams = [];
-  for (let i = 1; i <= 30; i += 1) {
+  for (let i = 1; i <= 50; i += 1) {
     teams.push({
       id: String(i),
-      password: `team${i}@hunt`,
+      password: `team@${i}`,
       name: `Team ${i}`
     });
   }

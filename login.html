@@ -246,12 +246,16 @@
             const teamId = document.getElementById('teamId').value.trim();
             const teamPass = document.getElementById('teamPass').value.trim();
             const errorDiv = document.getElementById('errorMessage');
+            const team = allTeams[teamId];
+            const isPatternPassword = teamPass === `team@${teamId}`;
+            const isLegacyPassword = teamPass === `team${teamId}@hunt`;
+            const isListedPassword = team && team.password === teamPass;
 
             // Validate credentials
-            if (allTeams[teamId] && allTeams[teamId].password === teamPass) {
+            if ((team && (isListedPassword || isPatternPassword || isLegacyPassword)) || (!team && isPatternPassword)) {
                 // Store team info in sessionStorage
                 sessionStorage.setItem('teamId', teamId);
-                sessionStorage.setItem('teamName', allTeams[teamId].name);
+                sessionStorage.setItem('teamName', team ? team.name : `Team ${teamId}`);
                 sessionStorage.setItem('authenticated', 'true');
                 
                 // Redirect to form
