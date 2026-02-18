@@ -10,6 +10,7 @@ const STORAGE_ROOT = process.env.STORAGE_ROOT || ROOT;
 const DATA_DIR = path.join(STORAGE_ROOT, 'data');
 const UPLOADS_DIR = path.join(STORAGE_ROOT, 'uploads');
 const SUBMISSIONS_FILE = path.join(DATA_DIR, 'submissions.json');
+const CREDENTIALS_FILE = path.join(ROOT, 'credentials.json');
 const MONGODB_URI = process.env.MONGODB_URI || '';
 const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'campus_hunt';
 const MONGODB_COLLECTION = process.env.MONGODB_COLLECTION || 'submissions';
@@ -36,6 +37,32 @@ let submissionsCollection;
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(payload));
+}
+
+function buildDefaultCredentials() {
+  const teams = [];
+  for (let i = 1; i <= 30; i += 1) {
+    teams.push({
+      id: String(i),
+      password: `team${i}@hunt`,
+      name: `Team ${i}`
+    });
+  }
+  return { teams };
+}
+
+async function readCredentials() {
+  try {
+    const raw = await fsp.readFile(CREDENTIALS_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed?.teams)) {
+      return parsed;
+    }
+  } catch {
+    // Fall back to generated defaults when credentials file is unavailable.
+  }
+
+  return buildDefaultCredentials();
 }
 
 function sanitizeFilePart(value) {
@@ -208,6 +235,16 @@ async function handleGetSubmissions(req, res, urlObj) {
   }
 }
 
+async function handleGetCredentials(_req, res) {
+  try {
+    const credentials = await readCredentials();
+    return sendJson(res, 200, credentials);
+  } catch (error) {
+    console.error('Failed to read credentials:', error);
+    return sendJson(res, 500, { error: 'Failed to read credentials' });
+  }
+}
+
 function resolvePathname(urlObj) {
   if (urlObj.pathname === '/') return '/login.html';
   return urlObj.pathname;
@@ -275,6 +312,10 @@ async function start() {
 
     if (req.method === 'GET' && urlObj.pathname === '/api/submissions') {
       return handleGetSubmissions(req, res, urlObj);
+    }
+
+    if (req.method === 'GET' && (urlObj.pathname === '/api/credentials' || urlObj.pathname === '/credentials.json')) {
+      return handleGetCredentials(req, res);
     }
 
     if (req.method === 'GET' && urlObj.pathname.startsWith('/uploads/')) {
