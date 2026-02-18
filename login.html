@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campus Treasure Hunt - Team Login</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .login-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 50px 40px;
+            width: 100%;
+            max-width: 400px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .login-header h1 {
+            color: #667eea;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .login-header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            transition: border-color 0.3s ease;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            margin-top: 10px;
+        }
+
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .login-btn:active {
+            transform: translateY(0);
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+            border: 1px solid #f5c6cb;
+        }
+
+        .error-message.show {
+            display: block;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .team-list {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 30px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .team-list h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+
+        .teams-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .team-item {
+            background: white;
+            padding: 8px;
+            border-radius: 4px;
+            text-align: center;
+            border: 1px solid #e0e0e0;
+        }
+
+        .team-item strong {
+            color: #667eea;
+        }
+
+        @media (max-width: 600px) {
+            .login-container {
+                padding: 40px 25px;
+            }
+
+            .login-header h1 {
+                font-size: 24px;
+            }
+
+            .teams-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <!-- Header -->
+        <div class="login-header">
+            <h1>🗺️ Campus Treasure Hunt</h1>
+            <p>Team Login Portal</p>
+        </div>
+
+        <!-- Error Message -->
+        <div class="error-message" id="errorMessage"></div>
+
+        <!-- Login Form -->
+        <form id="loginForm" onsubmit="handleLogin(event)">
+            <div class="form-group">
+                <label for="teamId">Team ID:</label>
+                <input 
+                    type="text" 
+                    id="teamId" 
+                    placeholder="Enter your Team ID (1-30)" 
+                    required
+                    autofocus
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="teamPass">Password:</label>
+                <input 
+                    type="password" 
+                    id="teamPass" 
+                    placeholder="Enter your password" 
+                    required
+                >
+            </div>
+
+            <button type="submit" class="login-btn">🚀 Start Treasure Hunt</button>
+        </form>
+
+        <!-- Team List -->
+        <div class="team-list">
+            <h3>📋 Sample Team Credentials:</h3>
+            <div class="teams-grid" id="sampleTeams"></div>
+        </div>
+    </div>
+
+    <script>
+        let allTeams = {};
+
+        // Load credentials from JSON
+        async function loadCredentials() {
+            try {
+                const response = await fetch('credentials.json');
+                const data = await response.json();
+                
+                // Convert array to object for easier lookup
+                data.teams.forEach(team => {
+                    allTeams[team.id] = {
+                        password: team.password,
+                        name: team.name
+                    };
+                });
+                
+                displaySampleTeams();
+            } catch (error) {
+                console.error('Error loading credentials:', error);
+                showError('Error loading team credentials. Please refresh the page.');
+            }
+        }
+
+        function handleLogin(event) {
+            event.preventDefault();
+            
+            const teamId = document.getElementById('teamId').value.trim();
+            const teamPass = document.getElementById('teamPass').value.trim();
+            const errorDiv = document.getElementById('errorMessage');
+
+            // Validate credentials
+            if (allTeams[teamId] && allTeams[teamId].password === teamPass) {
+                // Store team info in sessionStorage
+                sessionStorage.setItem('teamId', teamId);
+                sessionStorage.setItem('teamName', allTeams[teamId].name);
+                sessionStorage.setItem('authenticated', 'true');
+                
+                // Redirect to form
+                window.location.href = 'index.html';
+            } else {
+                // Show error
+                errorDiv.textContent = '❌ Invalid Team ID or Password. Please try again.';
+                errorDiv.classList.add('show');
+                
+                // Clear password field
+                document.getElementById('teamPass').value = '';
+                
+                // Hide error after 5 seconds
+                setTimeout(() => {
+                    errorDiv.classList.remove('show');
+                }, 5000);
+            }
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.classList.add('show');
+        }
+
+        // Display sample team credentials
+        function displaySampleTeams() {
+            const sampleTeamsDiv = document.getElementById('sampleTeams');
+            const sampleIndices = [1, 2, 3, 4, 5, 6];
+            
+            sampleIndices.forEach(i => {
+                const teamItem = document.createElement('div');
+                teamItem.className = 'team-item';
+                if (allTeams[i]) {
+                    teamItem.innerHTML = `
+                        <strong>Team ${i}</strong><br>
+                        <small>${allTeams[i].password}</small>
+                    `;
+                }
+                sampleTeamsDiv.appendChild(teamItem);
+            });
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', loadCredentials);
+    </script>
+</body>
+</html>
