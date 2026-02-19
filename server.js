@@ -2,6 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
+const Busboy = require('busboy');
 const { MongoClient } = require('mongodb');
 
 const PORT = process.env.PORT || 3000;
@@ -143,90 +144,59 @@ async function parseJsonBody(req, maxBytes = 25 * 1024 * 1024) {
   });
 }
 
-async function readBodyBuffer(req, maxBytes = 50 * 1024 * 1024) {
+async function parseMultipartWithBusboy(req, maxBytes = 50 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
-    const chunks = [];
-    let total = 0;
-
-    req.on('data', (chunk) => {
-      total += chunk.length;
-      if (total > maxBytes) {
-        reject(new Error('Payload too large'));
-        return;
-      }
-      chunks.push(chunk);
+    const bb = Busboy({
+      headers: req.headers,
+      limits: { fileSize: maxBytes, files: 1, fields: 50 }
     });
 
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
+    const fields = {};
+    let fileBuffer = Buffer.alloc(0);
+    let fileFound = false;
+    let fileName = 'camera-photo';
+    let mimeType = 'application/octet-stream';
+
+    bb.on('field', (name, value) => {
+      fields[name] = value;
+    });
+
+    bb.on('file', (_name, file, info) => {
+      fileFound = true;
+      fileName = (info && info.filename) || fileName;
+      mimeType = (info && info.mimeType) || mimeType;
+      const chunks = [];
+
+      file.on('data', (chunk) => {
+        chunks.push(chunk);
+      });
+
+      file.on('limit', () => {
+        reject(new Error('Payload too large'));
+      });
+
+      file.on('end', () => {
+        fileBuffer = Buffer.concat(chunks);
+      });
+    });
+
+    bb.on('error', reject);
+    bb.on('finish', () => {
+      resolve({
+        fields,
+        file: fileFound
+          ? {
+              fieldName: 'photo',
+              filename: fileName || 'camera-photo',
+              mimeType: mimeType || 'application/octet-stream',
+              buffer: fileBuffer
+            }
+          : null
+      });
+    });
+
+    req.pipe(bb);
   });
-}
-
-function parseMultipartBody(contentType, bodyBuffer) {
-  const boundaryMatch = String(contentType || '').match(/boundary=(?:"([^"]+)"|([^;]+))/i);
-  const boundary = boundaryMatch ? (boundaryMatch[1] || boundaryMatch[2]) : null;
-  if (!boundary) {
-    throw new Error('Missing multipart boundary');
-  }
-
-  const boundaryToken = `--${boundary}`;
-  const bodyText = bodyBuffer.toString('latin1');
-  const fields = {};
-  let file = null;
-  let cursor = 0;
-
-  while (true) {
-    const start = bodyText.indexOf(boundaryToken, cursor);
-    if (start === -1) break;
-    let partStart = start + boundaryToken.length;
-
-    if (bodyText.slice(partStart, partStart + 2) === '--') break;
-    if (bodyText.slice(partStart, partStart + 2) === '\r\n') {
-      partStart += 2;
-    }
-
-    const headerEnd = bodyText.indexOf('\r\n\r\n', partStart);
-    if (headerEnd === -1) break;
-
-    const headerText = bodyText.slice(partStart, headerEnd);
-    const nextBoundary = bodyText.indexOf(`\r\n${boundaryToken}`, headerEnd + 4);
-    if (nextBoundary === -1) break;
-
-    const partDataStart = headerEnd + 4;
-    const partDataEnd = nextBoundary;
-    const partBuffer = bodyBuffer.subarray(partDataStart, partDataEnd);
-
-    const dispositionLine = headerText
-      .split('\r\n')
-      .find((line) => line.toLowerCase().startsWith('content-disposition:'));
-
-    if (dispositionLine) {
-      const nameMatch = dispositionLine.match(/name="([^"]+)"/i);
-      const filenameMatch = dispositionLine.match(/filename="([^"]*)"/i);
-      const name = nameMatch ? nameMatch[1] : '';
-      const fileName = filenameMatch ? filenameMatch[1] : '';
-      const typeLine = headerText
-        .split('\r\n')
-        .find((line) => line.toLowerCase().startsWith('content-type:'));
-      const mimeType = typeLine ? typeLine.split(':')[1].trim().toLowerCase() : '';
-      const isLikelyFilePart = Boolean(typeLine) || name === 'photo' || !!fileName;
-
-      if (isLikelyFilePart) {
-        file = {
-          fieldName: name || 'photo',
-          filename: fileName || 'camera-photo',
-          mimeType: mimeType || 'application/octet-stream',
-          buffer: partBuffer
-        };
-      } else if (name) {
-        fields[name] = partBuffer.toString('utf-8');
-      }
-    }
-
-    cursor = nextBoundary + 2;
-  }
-
-  return { fields, file };
 }
 
 function extensionFromMimeOrName(mimeType, fileName) {
@@ -267,8 +237,7 @@ async function handleSubmission(req, res) {
 
   try {
     if (contentType.includes('multipart/form-data')) {
-      const bodyBuffer = await readBodyBuffer(req);
-      const parsed = parseMultipartBody(contentType, bodyBuffer);
+      const parsed = await parseMultipartWithBusboy(req);
       payload = parsed.fields || {};
       if (!parsed.file || !parsed.file.buffer || !parsed.file.buffer.length) {
         return sendJson(res, 400, { error: 'Missing photo file' });

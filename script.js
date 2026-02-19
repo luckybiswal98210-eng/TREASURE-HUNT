@@ -29,6 +29,7 @@ const fixedGameCheckpoints = [
 
 const FIXED_LAST_CLUE_ID = 18;
 const PROGRESS_VERSION = '2026-02-20-v2';
+const SHUFFLE_SALT = 872341;
 let orderedQuestions = [];
 
 let currentQuestionIndex = 0;
@@ -136,6 +137,16 @@ function clearProgress() {
     sessionStorage.removeItem(key);
 }
 
+function createSeededRandom(seed) {
+    let value = seed >>> 0;
+    return function seededRandom() {
+        value ^= value << 13;
+        value ^= value >>> 17;
+        value ^= value << 5;
+        return ((value >>> 0) % 1000000) / 1000000;
+    };
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
     try {
@@ -185,9 +196,11 @@ document.addEventListener('DOMContentLoaded', function() {
 function shuffleQuestions() {
     const lastClue = clueQuestions.find((q) => q.id === FIXED_LAST_CLUE_ID);
     const shufflePool = clueQuestions.filter((q) => q.id !== FIXED_LAST_CLUE_ID);
+    const teamSeed = Number.parseInt(String(teamId), 10) || 0;
+    const seededRandom = createSeededRandom((teamSeed * 1103515245 + SHUFFLE_SALT) >>> 0);
 
     for (let i = shufflePool.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = Math.floor(seededRandom() * (i + 1));
         [shufflePool[i], shufflePool[j]] = [shufflePool[j], shufflePool[i]];
     }
 
