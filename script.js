@@ -44,46 +44,21 @@ function getOrderIds() {
     return orderedQuestions.map((item) => Number(item.id));
 }
 
-function toPersistedFormData(items) {
-    if (!Array.isArray(items)) return [];
-    return items.map((item) => ({
-        questionId: Number(item.questionId),
-        question: String(item.question || ''),
-        answer: String(item.answer || ''),
-        isGame: Boolean(item.isGame),
-        isCorrect: item.isCorrect !== false,
-        photo: String(item.photo || ''),
-        timestamp: String(item.timestamp || '')
-    }));
-}
-
 function saveProgress() {
     const payload = {
         version: PROGRESS_VERSION,
         currentQuestionIndex,
-        formData: toPersistedFormData(formData),
         orderIds: getOrderIds()
     };
     try {
-        localStorage.setItem(getProgressStorageKey(), JSON.stringify(payload));
+        sessionStorage.setItem(getProgressStorageKey(), JSON.stringify(payload));
     } catch (error) {
-        console.warn('Progress storage full, retrying with minimal payload:', error);
-        try {
-            clearProgress();
-            const minimalPayload = {
-                version: PROGRESS_VERSION,
-                currentQuestionIndex,
-                orderIds: getOrderIds()
-            };
-            localStorage.setItem(getProgressStorageKey(), JSON.stringify(minimalPayload));
-        } catch (minimalError) {
-            console.warn('Progress save skipped due to storage limits:', minimalError);
-        }
+        console.warn('Progress save skipped due to storage limits:', error);
     }
 }
 
 function restoreProgress() {
-    const saved = localStorage.getItem(getProgressStorageKey());
+    const saved = sessionStorage.getItem(getProgressStorageKey());
     if (!saved) return;
 
     try {
@@ -115,16 +90,13 @@ function restoreProgress() {
         if (Number.isFinite(savedIndex) && savedIndex >= 0 && savedIndex <= maxIndex) {
             currentQuestionIndex = savedIndex;
         }
-        if (Array.isArray(parsed.formData)) {
-            formData = toPersistedFormData(parsed.formData);
-        }
     } catch (error) {
         console.error('Failed to restore saved progress:', error);
     }
 }
 
 function clearProgress() {
-    localStorage.removeItem(getProgressStorageKey());
+    sessionStorage.removeItem(getProgressStorageKey());
 }
 
 // Initialize on page load
