@@ -79,6 +79,45 @@
             object-fit: cover;
             border-radius: 8px;
             border: 1px solid #ddd;
+            cursor: zoom-in;
+            background: #f2f2f2;
+        }
+        .photo-hint {
+            font-size: 12px;
+            color: #666;
+            margin-top: 6px;
+        }
+        .photo-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            z-index: 1000;
+        }
+        .photo-modal.show { display: flex; }
+        .photo-modal img {
+            max-width: 100%;
+            max-height: 100%;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        .photo-modal-close {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            border: none;
+            border-radius: 999px;
+            width: 34px;
+            height: 34px;
+            font-size: 20px;
+            line-height: 34px;
+            text-align: center;
+            cursor: pointer;
+            background: #fff;
+            color: #222;
         }
         .empty {
             background: #fff;
@@ -121,6 +160,10 @@
         </div>
 
         <div id="responseList" class="list"></div>
+    </div>
+    <div id="photoModal" class="photo-modal" role="dialog" aria-modal="true" aria-label="Photo preview">
+        <button id="photoModalClose" class="photo-modal-close" type="button" aria-label="Close">×</button>
+        <img id="photoModalImg" alt="Submission photo preview">
     </div>
 
     <script>
@@ -167,7 +210,7 @@
                 item.question,
                 item.answer,
                 item.submittedAt || item.createdAt || '',
-                `${window.location.origin}${item.photoPath || ''}`
+                resolvePhotoUrl(item.photoPath)
             ]);
 
             const csvLines = [header, ...rows].map((row) => row.map(toCsvCell).join(',')).join('\n');
@@ -185,6 +228,32 @@
         function exportPdf() {
             if (!currentTeamSubmissions.length) return;
             window.print();
+        }
+
+        function resolvePhotoUrl(photoPath) {
+            const value = String(photoPath || '').trim();
+            if (!value) return '';
+            if (value.startsWith('data:image/')) return value;
+            if (value.startsWith('http://') || value.startsWith('https://')) return value;
+            if (value.startsWith('/')) return value;
+            return `/${value.replace(/^\/+/, '')}`;
+        }
+
+        function openPhotoModal(photoUrl) {
+            if (!photoUrl) return;
+            const modal = document.getElementById('photoModal');
+            const modalImg = document.getElementById('photoModalImg');
+            modalImg.src = photoUrl;
+            modal.classList.add('show');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closePhotoModal() {
+            const modal = document.getElementById('photoModal');
+            const modalImg = document.getElementById('photoModalImg');
+            modal.classList.remove('show');
+            modalImg.src = '';
+            document.body.style.overflow = '';
         }
 
         async function loadTeamProfile() {
@@ -236,6 +305,7 @@
                 document.getElementById('pdfBtn').disabled = false;
                 list.innerHTML = '';
                 submissions.forEach((item) => {
+                    const photoUrl = resolvePhotoUrl(item.photoPath);
                     const card = document.createElement('div');
                     card.className = 'item';
                     card.innerHTML = `
@@ -247,10 +317,18 @@
                         <div class="label">Submitted Time</div>
                         <div class="value">${escapeHtml(item.submittedAt || item.createdAt || '-')}</div>
                         <div class="label">Photo</div>
-                        <a href="${escapeHtml(item.photoPath)}" target="_blank" rel="noopener noreferrer">
-                            <img class="photo" src="${escapeHtml(item.photoPath)}" alt="Team submission photo">
-                        </a>
+                        <img class="photo" src="${escapeHtml(photoUrl)}" alt="Team submission photo">
+                        <div class="photo-hint">Tap image to view full size</div>
                     `;
+                    const image = card.querySelector('.photo');
+                    image.addEventListener('click', () => openPhotoModal(photoUrl));
+                    image.addEventListener('error', () => {
+                        image.removeAttribute('src');
+                        image.style.height = 'auto';
+                        image.style.padding = '14px';
+                        image.style.cursor = 'default';
+                        image.alt = 'Photo unavailable';
+                    });
                     list.appendChild(card);
                 });
             } catch (error) {
@@ -259,7 +337,18 @@
             }
         }
 
-        document.addEventListener('DOMContentLoaded', loadTeamProfile);
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTeamProfile();
+            const modal = document.getElementById('photoModal');
+            const closeBtn = document.getElementById('photoModalClose');
+            closeBtn.addEventListener('click', closePhotoModal);
+            modal.addEventListener('click', (event) => {
+                if (event.target === modal) closePhotoModal();
+            });
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') closePhotoModal();
+            });
+        });
     </script>
 </body>
 </html>
