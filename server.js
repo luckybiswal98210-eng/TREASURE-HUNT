@@ -14,6 +14,7 @@ const CREDENTIALS_FILE = path.join(ROOT, 'credentials.json');
 const MONGODB_URI = process.env.MONGODB_URI || '';
 const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'campus_hunt';
 const MONGODB_COLLECTION = process.env.MONGODB_COLLECTION || 'submissions';
+const ADMIN_RESET_TOKEN = process.env.ADMIN_RESET_TOKEN || '';
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -369,6 +370,52 @@ async function handleGetCredentials(_req, res) {
   }
 }
 
+async function removeAllUploadedFiles() {
+  try {
+    const entries = await fsp.readdir(UPLOADS_DIR, { withFileTypes: true });
+    await Promise.all(
+      entries
+        .filter((entry) => entry.isFile())
+        .map((entry) => fsp.unlink(path.join(UPLOADS_DIR, entry.name)))
+    );
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return;
+    throw error;
+  }
+}
+
+async function resetAllSubmissions() {
+  if (USE_MONGO) {
+    await submissionsCollection.deleteMany({});
+  } else {
+    await writeSubmissions([]);
+  }
+
+  await removeAllUploadedFiles();
+}
+
+async function handleResetSubmissions(req, res) {
+  let body = {};
+  try {
+    body = await parseJsonBody(req, 2 * 1024 * 1024);
+  } catch (error) {
+    const code = error.message === 'Payload too large' ? 413 : 400;
+    return sendJson(res, code, { error: error.message });
+  }
+
+  if (ADMIN_RESET_TOKEN && String(body.token || '') !== ADMIN_RESET_TOKEN) {
+    return sendJson(res, 401, { error: 'Invalid admin reset token' });
+  }
+
+  try {
+    await resetAllSubmissions();
+    return sendJson(res, 200, { success: true, message: 'All submissions and uploaded photos cleared.' });
+  } catch (error) {
+    console.error('Failed to reset submissions:', error);
+    return sendJson(res, 500, { error: 'Failed to reset submissions' });
+  }
+}
+
 function resolvePathname(urlObj) {
   if (urlObj.pathname === '/') return '/login.html';
   return urlObj.pathname;
@@ -440,6 +487,10 @@ async function start() {
 
     if (req.method === 'GET' && (urlObj.pathname === '/api/credentials' || urlObj.pathname === '/credentials.json')) {
       return handleGetCredentials(req, res);
+    }
+
+    if (req.method === 'POST' && urlObj.pathname === '/api/admin/reset-submissions') {
+      return handleResetSubmissions(req, res);
     }
 
     if (req.method === 'GET' && urlObj.pathname.startsWith('/uploads/')) {

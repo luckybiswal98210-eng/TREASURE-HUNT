@@ -136,6 +136,15 @@
             background: #0056b3;
         }
 
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
         .actions {
             display: flex;
             gap: 20px;
@@ -187,6 +196,7 @@
             <button class="btn btn-export" onclick="exportCredentials()">📥 Export & Download</button>
             <button class="btn btn-download" onclick="resetToDefault()">🔄 Reset to Default</button>
             <button class="btn btn-export" onclick="openTeamResponsesPage()">🧾 Load Team Responses</button>
+            <button class="btn btn-danger" onclick="resetAllSubmissions()">🗑️ Reset All Responses</button>
         </div>
 
         <!-- Credentials Table -->
@@ -302,6 +312,32 @@
                 }
                 displayCredentials();
                 showSuccessMessage();
+            }
+        }
+
+        async function resetAllSubmissions() {
+            const confirmText = 'This will delete all saved responses and all uploaded photos for every team. Continue?';
+            if (!confirm(confirmText)) return;
+
+            const token = prompt('Enter admin reset token (leave blank if not configured):') || '';
+
+            try {
+                const response = await fetch('/api/admin/reset-submissions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ token })
+                });
+
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.error || 'Reset failed');
+                }
+
+                alert('All responses and photos cleared successfully.');
+            } catch (error) {
+                alert(`Failed to reset responses: ${error.message}`);
             }
         }
 
