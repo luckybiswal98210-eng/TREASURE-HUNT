@@ -28,6 +28,7 @@ const fixedGameCheckpoints = [
 ];
 
 const FIXED_LAST_CLUE_ID = 18;
+const PROGRESS_VERSION = '2026-02-20-v1';
 let orderedQuestions = [];
 
 let currentQuestionIndex = 0;
@@ -41,6 +42,7 @@ function getProgressStorageKey() {
 
 function saveProgress() {
     const payload = {
+        version: PROGRESS_VERSION,
         currentQuestionIndex,
         formData,
         orderedQuestions
@@ -54,6 +56,10 @@ function restoreProgress() {
 
     try {
         const parsed = JSON.parse(saved);
+        if (parsed.version !== PROGRESS_VERSION) {
+            clearProgress();
+            return;
+        }
         if (Array.isArray(parsed.orderedQuestions) && parsed.orderedQuestions.length === orderedQuestions.length) {
             orderedQuestions = parsed.orderedQuestions;
         }
@@ -209,6 +215,48 @@ function fileToDataUrl(file) {
     });
 }
 
+function loadImageFromDataUrl(dataUrl) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('Failed to load image'));
+        img.src = dataUrl;
+    });
+}
+
+async function preparePhotoDataUrl(file) {
+    const originalDataUrl = await fileToDataUrl(file);
+
+    // Phone camera photos can be large. Compress to jpeg for reliable upload.
+    try {
+        const img = await loadImageFromDataUrl(originalDataUrl);
+        const maxDim = 1600;
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const width = Math.max(1, Math.round(img.width * scale));
+        const height = Math.max(1, Math.round(img.height * scale));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return originalDataUrl;
+        ctx.drawImage(img, 0, 0, width, height);
+
+        let quality = 0.82;
+        let compressed = canvas.toDataURL('image/jpeg', quality);
+        while (compressed.length > 5 * 1024 * 1024 && quality > 0.45) {
+            quality -= 0.1;
+            compressed = canvas.toDataURL('image/jpeg', quality);
+        }
+
+        return compressed;
+    } catch (error) {
+        console.warn('Falling back to original photo data:', error);
+        return originalDataUrl;
+    }
+}
+
 function normalizeForStrictMatch(value) {
     return String(value || '')
         .toLowerCase()
@@ -216,7 +264,7 @@ function normalizeForStrictMatch(value) {
 }
 
 async function saveResponseToServer(currentQuestion, answer, photo) {
-    const photoDataUrl = await fileToDataUrl(photo);
+    const photoDataUrl = await preparePhotoDataUrl(photo);
     const payload = {
         teamId: teamId,
         teamName: teamName,
@@ -238,7 +286,14 @@ async function saveResponseToServer(currentQuestion, answer, photo) {
     });
 
     if (!response.ok) {
-        throw new Error('Server failed to save response');
+        let serverError = 'Server failed to save response';
+        try {
+            const body = await response.json();
+            if (body && body.error) serverError = body.error;
+        } catch {
+            // Ignore parse failure and keep generic error.
+        }
+        throw new Error(serverError);
     }
 
     const result = await response.json();
@@ -301,7 +356,8 @@ async function validateAnswer() {
                 }
             }, 1200);
         } catch (error) {
-            msg.innerHTML = '❌ Correct answer, but save failed. Please retry.';
+            const details = error && error.message ? ` (${error.message})` : '';
+            msg.innerHTML = `❌ Correct answer, but save failed. Please retry.${details}`;
             msg.className = 'validation-message show error';
         } finally {
             validateBtn.disabled = false;

@@ -119,7 +119,7 @@ async function nextSubmissionId() {
   return items.length + 1;
 }
 
-async function parseJsonBody(req, maxBytes = 15 * 1024 * 1024) {
+async function parseJsonBody(req, maxBytes = 25 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
     let body = '';
 
