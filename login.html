@@ -218,6 +218,13 @@
 
     <script>
         let allTeams = {};
+        let teamsByNormalizedId = {};
+
+        function normalizeCredential(value) {
+            return String(value || '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]/g, '');
+        }
 
         // Load credentials from JSON
         async function loadCredentials() {
@@ -227,9 +234,15 @@
                 
                 // Convert array to object for easier lookup
                 data.teams.forEach(team => {
-                    allTeams[team.id] = {
+                    const normalizedId = normalizeCredential(team.id);
+                    const teamRecord = {
                         password: team.password,
                         name: team.name
+                    };
+                    allTeams[team.id] = teamRecord;
+                    teamsByNormalizedId[normalizedId] = {
+                        id: String(team.id),
+                        ...teamRecord
                     };
                 });
                 
@@ -243,19 +256,19 @@
         function handleLogin(event) {
             event.preventDefault();
             
-            const teamId = document.getElementById('teamId').value.trim();
-            const teamPass = document.getElementById('teamPass').value.trim();
+            const teamIdInput = document.getElementById('teamId').value.trim();
+            const teamPassInput = document.getElementById('teamPass').value.trim();
             const errorDiv = document.getElementById('errorMessage');
-            const team = allTeams[teamId];
-            const isPatternPassword = teamPass === `team@${teamId}`;
-            const isLegacyPassword = teamPass === `team${teamId}@hunt`;
-            const isListedPassword = team && team.password === teamPass;
+            const normalizedTeamId = normalizeCredential(teamIdInput);
+            const normalizedPassword = normalizeCredential(teamPassInput);
+            const team = teamsByNormalizedId[normalizedTeamId];
+            const isListedPassword = team && normalizeCredential(team.password) === normalizedPassword;
 
             // Validate credentials
-            if ((team && (isListedPassword || isPatternPassword || isLegacyPassword)) || (!team && isPatternPassword)) {
+            if (team && isListedPassword) {
                 // Store team info in sessionStorage
-                sessionStorage.setItem('teamId', teamId);
-                sessionStorage.setItem('teamName', team ? team.name : `Team ${teamId}`);
+                sessionStorage.setItem('teamId', team.id);
+                sessionStorage.setItem('teamName', team.name);
                 sessionStorage.setItem('authenticated', 'true');
                 
                 // Redirect to form
