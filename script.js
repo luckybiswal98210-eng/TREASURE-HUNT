@@ -35,6 +35,41 @@ let formData = [];
 let teamId = '1';
 let teamName = 'Team';
 
+function getProgressStorageKey() {
+    return `huntProgress:${teamId}`;
+}
+
+function saveProgress() {
+    const payload = {
+        currentQuestionIndex,
+        formData
+    };
+    localStorage.setItem(getProgressStorageKey(), JSON.stringify(payload));
+}
+
+function restoreProgress() {
+    const saved = localStorage.getItem(getProgressStorageKey());
+    if (!saved) return;
+
+    try {
+        const parsed = JSON.parse(saved);
+        const savedIndex = Number(parsed.currentQuestionIndex);
+        const maxIndex = orderedQuestions.length;
+        if (Number.isFinite(savedIndex) && savedIndex >= 0 && savedIndex <= maxIndex) {
+            currentQuestionIndex = savedIndex;
+        }
+        if (Array.isArray(parsed.formData)) {
+            formData = parsed.formData;
+        }
+    } catch (error) {
+        console.error('Failed to restore saved progress:', error);
+    }
+}
+
+function clearProgress() {
+    localStorage.removeItem(getProgressStorageKey());
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
     try {
@@ -53,6 +88,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Build question order for this team
         shuffleQuestions();
+        restoreProgress();
         
         // Setup listeners
         document.getElementById('cameraBtn').addEventListener('click', openCamera);
@@ -63,8 +99,11 @@ document.addEventListener('DOMContentLoaded', function() {
             if (e.key === 'Enter') validateAnswer();
         });
         
-        // Load first question
-        loadQuestion();
+        if (currentQuestionIndex >= orderedQuestions.length) {
+            showSummary();
+        } else {
+            loadQuestion();
+        }
         console.log('✓ Initialized for Team ' + teamId);
     } catch (error) {
         console.error('ERROR:', error);
@@ -248,8 +287,10 @@ async function validateAnswer() {
 
             msg.innerHTML = '✓ Correct! Saved successfully.';
 
+            currentQuestionIndex++;
+            saveProgress();
+
             setTimeout(() => {
-                currentQuestionIndex++;
                 if (currentQuestionIndex < orderedQuestions.length) {
                     loadQuestion();
                 } else {
@@ -297,6 +338,7 @@ function showSummary() {
 
 // Reset
 function resetForm() {
+    clearProgress();
     currentQuestionIndex = 0;
     formData = [];
     shuffleQuestions();
