@@ -1,11 +1,11 @@
 // 18 clue questions. LC-1 Top Floor is fixed as the last clue for all teams.
 const clueQuestions = [
     { id: 1, question: "I am not a classroom, yet all must pass. Morning rush and evening mass. Guarded strong where journeys start, Through me begins your campus part.", answer: "Main Gate" },
-    { id: 2, question: "I never bat, I never bowl, Yet I watch each wicket and every goal. Steps climb high in steady lines, Where cheers grow loud at thrilling times.", answer: "Cricket Ground Seating Area" },
-    { id: 3, question: "Find the place where business meets law. A tall red sign will guide what you saw. Not a classroom, yet it shows the way, To minds at work both night and day.", answer: "LC-1 Sign Board" },
+    { id: 2, question: "I never bat, I never bowl, Yet I watch each wicket and every goal. Steps climb high in steady lines, Where cheers grow loud at thrilling times.", answer: "Cricket Ground" },
+    { id: 3, question: "Find the place where business meets law. A tall red sign will guide what you saw. Not a classroom, yet it shows the way, To minds at work both night and day.", answer: "LC1 Sign Board" },
     { id: 4, question: "When your wallet is empty and hopes are high, Follow the path of fancy stones. To the machine that eats cards and spits notes.", answer: "ATM" },
-    { id: 5, question: "Food and water in name I claim, Seek the tent that shares the same. Beneath the colors overhead, Your next direction waits to be read.", answer: "Dana Pani Tent" },
-    { id: 6, question: "Saffron, white, and green held high, Watching quietly as football players pass by. Not part of the game, yet central to all. Find the colors that never fall.", answer: "Football Ground Flag Hosting Area" },
+    { id: 5, question: "Food and water in name I claim, Seek the tent that shares the same. Beneath the colors overhead, Your next direction waits to be read.", answer: "Dana Pani" },
+    { id: 6, question: "Saffron, white, and green held high, Watching quietly as football players pass by. Not part of the game, yet central to all. Find the colors that never fall.", answer: "Football Ground" },
     { id: 7, question: "Long ears, quick hops, and cotton tail white, I munch on greens from morning till night. I am not free to roam, I stay in a cage. Find me near food but off the stage.", answer: "Rabbit Cage" },
     { id: 8, question: "Heading for fun or heading to eat, You will pass a red cube on this street. Big, bold, and hard to ignore. Your next clue waits at its door.", answer: "Red Room" },
     { id: 9, question: "I stand where many paths are curved, Between the halls where food is served. I throw up water, cool and bright, Shining gently in plain sight.", answer: "Mess Fountain" },
@@ -14,10 +14,10 @@ const clueQuestions = [
     { id: 12, question: "No single purpose, yet always full, No doors to close, no crowds to pull. Where sport meets snack and talks run free. Find the campus open sea.", answer: "Alfresco" },
     { id: 13, question: "No exams are written here, Yet every student must appear. Fees, IDs, or documents in stock, Find the college control block.", answer: "Admin Block" },
     { id: 14, question: "After knowledge travels far and wide, Its keepers here choose to reside. No timetable rules this place. Find the homes of guiding grace.", answer: "Faculty Quarters" },
-    { id: 15, question: "Silence speaks louder than sound, Knowledge is waiting to be found. Before the books line every side, Find the door where minds open wide.", answer: "Library Entrance" },
-    { id: 16, question: "Where fun and fests come alive, And student talents always thrive. Near the office that guides your way, A locker quietly waits today.", answer: "Activity Centre (Locker)" },
-    { id: 17, question: "Where tools speak louder than words, And practice matters more than awards. Not theory alone, but hands that work. Find the place where skills do not shirk.", answer: "PDR Workshop" },
-    { id: 18, question: "Where power is studied and justice is taught, Rise above both to the place they forgot. No deals are signed, no verdicts spoken. Just sky above and silence unbroken.", answer: "LC-1 Top Floor" }
+    { id: 15, question: "Silence speaks louder than sound, Knowledge is waiting to be found. Before the books line every side, Find the door where minds open wide.", answer: "Library" },
+    { id: 16, question: "Where fun and fests come alive, And student talents always thrive. Near the office that guides your way, A locker quietly waits today.", answer: "Activity Centre" },
+    { id: 17, question: "Where tools speak louder than words, And practice matters more than awards. Not theory alone, but hands that work. Find the place where skills do not shirk.", answer: "Workshop" },
+    { id: 18, question: "Where power is studied and justice is taught, Rise above both to the place they forgot. No deals are signed, no verdicts spoken. Just sky above and silence unbroken.", answer: "LC1 Top Floor" }
 ];
 
 const fixedGameCheckpoints = [
