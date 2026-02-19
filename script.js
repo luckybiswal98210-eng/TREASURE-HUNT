@@ -28,7 +28,7 @@ const fixedGameCheckpoints = [
 ];
 
 const FIXED_LAST_CLUE_ID = 18;
-const PROGRESS_VERSION = '2026-02-20-v1';
+const PROGRESS_VERSION = '2026-02-20-v2';
 let orderedQuestions = [];
 
 let currentQuestionIndex = 0;
@@ -40,14 +40,46 @@ function getProgressStorageKey() {
     return `huntProgress:${teamId}`;
 }
 
+function getOrderIds() {
+    return orderedQuestions.map((item) => Number(item.id));
+}
+
+function toPersistedFormData(items) {
+    if (!Array.isArray(items)) return [];
+    return items.map((item) => ({
+        questionId: Number(item.questionId),
+        question: String(item.question || ''),
+        answer: String(item.answer || ''),
+        isGame: Boolean(item.isGame),
+        isCorrect: item.isCorrect !== false,
+        photo: String(item.photo || ''),
+        timestamp: String(item.timestamp || '')
+    }));
+}
+
 function saveProgress() {
     const payload = {
         version: PROGRESS_VERSION,
         currentQuestionIndex,
-        formData,
-        orderedQuestions
+        formData: toPersistedFormData(formData),
+        orderIds: getOrderIds()
     };
-    localStorage.setItem(getProgressStorageKey(), JSON.stringify(payload));
+    try {
+        localStorage.setItem(getProgressStorageKey(), JSON.stringify(payload));
+    } catch (error) {
+        console.warn('Progress storage full, retrying with minimal payload:', error);
+        try {
+            clearProgress();
+            const minimalPayload = {
+                version: PROGRESS_VERSION,
+                currentQuestionIndex,
+                orderIds: getOrderIds()
+            };
+            localStorage.setItem(getProgressStorageKey(), JSON.stringify(minimalPayload));
+        } catch (minimalError) {
+            console.warn('Progress save skipped due to storage limits:', minimalError);
+        }
+    }
 }
 
 function restoreProgress() {
@@ -60,8 +92,23 @@ function restoreProgress() {
             clearProgress();
             return;
         }
-        if (Array.isArray(parsed.orderedQuestions) && parsed.orderedQuestions.length === orderedQuestions.length) {
-            orderedQuestions = parsed.orderedQuestions;
+        if (Array.isArray(parsed.orderIds) && parsed.orderIds.length === orderedQuestions.length) {
+            const byId = {};
+            orderedQuestions.forEach((item) => {
+                byId[Number(item.id)] = item;
+            });
+
+            const restored = parsed.orderIds
+                .map((id, index) => {
+                    const found = byId[Number(id)];
+                    if (!found) return null;
+                    return { ...found, sequenceNo: index + 1 };
+                })
+                .filter(Boolean);
+
+            if (restored.length === orderedQuestions.length) {
+                orderedQuestions = restored;
+            }
         }
         const savedIndex = Number(parsed.currentQuestionIndex);
         const maxIndex = orderedQuestions.length;
@@ -69,7 +116,7 @@ function restoreProgress() {
             currentQuestionIndex = savedIndex;
         }
         if (Array.isArray(parsed.formData)) {
-            formData = parsed.formData;
+            formData = toPersistedFormData(parsed.formData);
         }
     } catch (error) {
         console.error('Failed to restore saved progress:', error);
@@ -206,57 +253,6 @@ function handlePhotoUpload() {
     reader.readAsDataURL(file);
 }
 
-function fileToDataUrl(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (event) => resolve(event.target.result);
-        reader.onerror = () => reject(new Error('Failed to read photo'));
-        reader.readAsDataURL(file);
-    });
-}
-
-function loadImageFromDataUrl(dataUrl) {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = () => reject(new Error('Failed to load image'));
-        img.src = dataUrl;
-    });
-}
-
-async function preparePhotoDataUrl(file) {
-    const originalDataUrl = await fileToDataUrl(file);
-
-    // Phone camera photos can be large. Compress to jpeg for reliable upload.
-    try {
-        const img = await loadImageFromDataUrl(originalDataUrl);
-        const maxDim = 1600;
-        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-        const width = Math.max(1, Math.round(img.width * scale));
-        const height = Math.max(1, Math.round(img.height * scale));
-
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return originalDataUrl;
-        ctx.drawImage(img, 0, 0, width, height);
-
-        let quality = 0.82;
-        let compressed = canvas.toDataURL('image/jpeg', quality);
-        while (compressed.length > 5 * 1024 * 1024 && quality > 0.45) {
-            quality -= 0.1;
-            compressed = canvas.toDataURL('image/jpeg', quality);
-        }
-
-        return compressed;
-    } catch (error) {
-        console.warn('Falling back to original photo data:', error);
-        return originalDataUrl;
-    }
-}
-
 function normalizeForStrictMatch(value) {
     return String(value || '')
         .toLowerCase()
@@ -264,25 +260,19 @@ function normalizeForStrictMatch(value) {
 }
 
 async function saveResponseToServer(currentQuestion, answer, photo) {
-    const photoDataUrl = await preparePhotoDataUrl(photo);
-    const payload = {
-        teamId: teamId,
-        teamName: teamName,
-        questionId: currentQuestion.sequenceNo,
-        question: currentQuestion.question,
-        answer: answer,
-        isCorrect: true,
-        photoName: photo.name,
-        photoDataUrl: photoDataUrl,
-        timestamp: new Date().toLocaleTimeString()
-    };
+    const payload = new FormData();
+    payload.append('teamId', teamId);
+    payload.append('teamName', teamName);
+    payload.append('questionId', String(currentQuestion.sequenceNo));
+    payload.append('question', currentQuestion.question);
+    payload.append('answer', answer);
+    payload.append('isCorrect', 'true');
+    payload.append('timestamp', new Date().toLocaleTimeString());
+    payload.append('photo', photo, photo.name || 'camera-photo.jpg');
 
     const response = await fetch('/api/submissions', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
+        body: payload
     });
 
     if (!response.ok) {
@@ -339,7 +329,6 @@ async function validateAnswer() {
                 isGame: Boolean(currentQuestion.isGame),
                 isCorrect: true,
                 photo: photo.name,
-                savedPhotoPath: savedRecord.photoPath,
                 timestamp: new Date().toLocaleTimeString()
             });
 

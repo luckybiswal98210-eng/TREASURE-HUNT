@@ -73,6 +73,8 @@ function sanitizeFilePart(value) {
 }
 
 async function ensureStorage() {
+  await fsp.mkdir(UPLOADS_DIR, { recursive: true });
+
   if (USE_MONGO) {
     mongoClient = new MongoClient(MONGODB_URI);
     await mongoClient.connect();
@@ -83,8 +85,6 @@ async function ensureStorage() {
   }
 
   await fsp.mkdir(DATA_DIR, { recursive: true });
-  await fsp.mkdir(UPLOADS_DIR, { recursive: true });
-
   try {
     await fsp.access(SUBMISSIONS_FILE);
   } catch {
@@ -142,38 +142,161 @@ async function parseJsonBody(req, maxBytes = 25 * 1024 * 1024) {
   });
 }
 
+async function readBodyBuffer(req, maxBytes = 50 * 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let total = 0;
+
+    req.on('data', (chunk) => {
+      total += chunk.length;
+      if (total > maxBytes) {
+        reject(new Error('Payload too large'));
+        return;
+      }
+      chunks.push(chunk);
+    });
+
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+function parseMultipartBody(contentType, bodyBuffer) {
+  const boundaryMatch = String(contentType || '').match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+  const boundary = boundaryMatch ? (boundaryMatch[1] || boundaryMatch[2]) : null;
+  if (!boundary) {
+    throw new Error('Missing multipart boundary');
+  }
+
+  const boundaryToken = `--${boundary}`;
+  const bodyText = bodyBuffer.toString('latin1');
+  const fields = {};
+  let file = null;
+  let cursor = 0;
+
+  while (true) {
+    const start = bodyText.indexOf(boundaryToken, cursor);
+    if (start === -1) break;
+    let partStart = start + boundaryToken.length;
+
+    if (bodyText.slice(partStart, partStart + 2) === '--') break;
+    if (bodyText.slice(partStart, partStart + 2) === '\r\n') {
+      partStart += 2;
+    }
+
+    const headerEnd = bodyText.indexOf('\r\n\r\n', partStart);
+    if (headerEnd === -1) break;
+
+    const headerText = bodyText.slice(partStart, headerEnd);
+    const nextBoundary = bodyText.indexOf(`\r\n${boundaryToken}`, headerEnd + 4);
+    if (nextBoundary === -1) break;
+
+    const partDataStart = headerEnd + 4;
+    const partDataEnd = nextBoundary;
+    const partBuffer = bodyBuffer.subarray(partDataStart, partDataEnd);
+
+    const dispositionLine = headerText
+      .split('\r\n')
+      .find((line) => line.toLowerCase().startsWith('content-disposition:'));
+
+    if (dispositionLine) {
+      const nameMatch = dispositionLine.match(/name="([^"]+)"/i);
+      const filenameMatch = dispositionLine.match(/filename="([^"]*)"/i);
+      const name = nameMatch ? nameMatch[1] : '';
+      const fileName = filenameMatch ? filenameMatch[1] : '';
+
+      if (fileName) {
+        const typeLine = headerText
+          .split('\r\n')
+          .find((line) => line.toLowerCase().startsWith('content-type:'));
+        const mimeType = typeLine ? typeLine.split(':')[1].trim().toLowerCase() : 'application/octet-stream';
+        file = {
+          fieldName: name || 'photo',
+          filename: fileName,
+          mimeType,
+          buffer: partBuffer
+        };
+      } else if (name) {
+        fields[name] = partBuffer.toString('utf-8');
+      }
+    }
+
+    cursor = nextBoundary + 2;
+  }
+
+  return { fields, file };
+}
+
+function extensionFromMimeOrName(mimeType, fileName) {
+  const extByMime = {
+    'image/jpeg': '.jpg',
+    'image/jpg': '.jpg',
+    'image/png': '.png',
+    'image/webp': '.webp',
+    'image/gif': '.gif',
+    'image/heic': '.heic',
+    'image/heif': '.heif'
+  };
+  if (extByMime[mimeType]) return extByMime[mimeType];
+
+  const rawExt = path.extname(fileName || '').toLowerCase();
+  if (['.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.heif'].includes(rawExt)) {
+    return rawExt === '.jpeg' ? '.jpg' : rawExt;
+  }
+  return '.jpg';
+}
+
+function parseBoolean(value, defaultValue = true) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+  }
+  return defaultValue;
+}
+
 async function handleSubmission(req, res) {
+  const contentType = String(req.headers['content-type'] || '').toLowerCase();
   let payload;
+  let photoBuffer;
+  let photoMimeType;
+  let originalPhotoName = 'camera-photo';
+
   try {
-    payload = await parseJsonBody(req);
+    if (contentType.includes('multipart/form-data')) {
+      const bodyBuffer = await readBodyBuffer(req);
+      const parsed = parseMultipartBody(contentType, bodyBuffer);
+      payload = parsed.fields || {};
+      if (!parsed.file || !parsed.file.buffer || !parsed.file.buffer.length) {
+        return sendJson(res, 400, { error: 'Missing photo file' });
+      }
+      photoBuffer = parsed.file.buffer;
+      photoMimeType = parsed.file.mimeType;
+      originalPhotoName = parsed.file.filename || originalPhotoName;
+    } else {
+      payload = await parseJsonBody(req);
+      const match = String(payload.photoDataUrl || '').match(DATA_URL_PATTERN);
+      if (!match) {
+        return sendJson(res, 400, { error: 'photoDataUrl must be a valid base64 image data URL' });
+      }
+      photoMimeType = match[1].toLowerCase();
+      photoBuffer = Buffer.from(match[2], 'base64');
+      originalPhotoName = String(payload.photoName || originalPhotoName);
+    }
   } catch (error) {
     const code = error.message === 'Payload too large' ? 413 : 400;
     return sendJson(res, code, { error: error.message });
   }
 
-  const requiredFields = ['teamId', 'teamName', 'questionId', 'question', 'answer', 'photoDataUrl'];
+  const requiredFields = ['teamId', 'teamName', 'questionId', 'question', 'answer'];
   for (const field of requiredFields) {
     if (!payload[field]) {
       return sendJson(res, 400, { error: `Missing field: ${field}` });
     }
   }
 
-  const match = String(payload.photoDataUrl).match(DATA_URL_PATTERN);
-  if (!match) {
-    return sendJson(res, 400, { error: 'photoDataUrl must be a valid base64 image data URL' });
-  }
-
-  const mimeType = match[1].toLowerCase();
-  const base64Data = match[2];
-  const extByMime = {
-    'image/jpeg': '.jpg',
-    'image/jpg': '.jpg',
-    'image/png': '.png',
-    'image/webp': '.webp',
-    'image/gif': '.gif'
-  };
-
-  const extension = extByMime[mimeType] || '.jpg';
+  const extension = extensionFromMimeOrName(photoMimeType, originalPhotoName);
   const now = new Date();
   const safeTeam = sanitizeFilePart(payload.teamId);
   const safeQuestion = sanitizeFilePart(payload.questionId);
@@ -181,6 +304,8 @@ async function handleSubmission(req, res) {
   const filePath = path.join(UPLOADS_DIR, fileName);
 
   try {
+    await fsp.writeFile(filePath, photoBuffer);
+
     const id = await nextSubmissionId();
     const record = {
       id,
@@ -189,18 +314,17 @@ async function handleSubmission(req, res) {
       questionId: Number(payload.questionId),
       question: String(payload.question),
       answer: String(payload.answer),
-      isCorrect: payload.isCorrect !== false,
+      isCorrect: parseBoolean(payload.isCorrect, true),
       submittedAt: String(payload.timestamp || now.toLocaleTimeString()),
       createdAt: now.toISOString(),
-      originalPhotoName: String(payload.photoName || 'camera-photo')
+      originalPhotoName: String(originalPhotoName || 'camera-photo'),
+      photoMimeType: String(photoMimeType || ''),
+      photoPath: `/uploads/${fileName}`
     };
 
     if (USE_MONGO) {
-      record.photoPath = String(payload.photoDataUrl);
       await submissionsCollection.insertOne(record);
     } else {
-      await fsp.writeFile(filePath, Buffer.from(base64Data, 'base64'));
-      record.photoPath = `/uploads/${fileName}`;
       const submissions = await readSubmissions();
       submissions.push(record);
       await writeSubmissions(submissions);
