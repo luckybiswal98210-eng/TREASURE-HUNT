@@ -10,7 +10,7 @@ const clueQuestions = [
     { id: 8, question: "Heading for fun or heading to eat, You will pass a red cube on this street. Big, bold, and hard to ignore. Your next clue waits at its door.", answer: "Red Room" },
     { id: 9, question: "I stand where many paths are curved, Between the halls where food is served. I throw up water, cool and bright, Shining gently in plain sight.", answer: "Mess Fountain" },
     { id: 10, question: "When the sun is hot and games are tight, I bring cold smiles in every bite. Butter, milk and creamy delight, Standing close to the tennis sight.", answer: "Amul" },
-    { id: 11, question: "Where dosas crisp and chutneys flow, Long red seats sit row by row. Hungry crowds gather day and night. Find the place of southern delight.", answer: "Aanatha Ahara" },
+    { id: 11, question: "Where dosas crisp and chutneys flow, Long red seats sit row by row. Hungry crowds gather day and night. Find the place of southern delight.", answer: "Anantha Aahara" },
     { id: 12, question: "No single purpose, yet always full, No doors to close, no crowds to pull. Where sport meets snack and talks run free. Find the campus open sea.", answer: "Alfresco" },
     { id: 13, question: "No exams are written here, Yet every student must appear. Fees, IDs, or documents in stock, Find the college control block.", answer: "Admin Block" },
     { id: 14, question: "After knowledge travels far and wide, Its keepers here choose to reside. No timetable rules this place. Find the homes of guiding grace.", answer: "Faculty Quarters" },
