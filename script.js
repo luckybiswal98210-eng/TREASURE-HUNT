@@ -1,7 +1,7 @@
 // 18 clue questions. LC-1 Top Floor is fixed as the last clue for all teams.
 const clueQuestions = [
-    { id: 1, question: "Main gate - I am not a classroom, yet all must pass. Morning rush and evening mass. Guarded strong where journeys start, Through me begins your campus part.", answer: "Main Gate" },
-    { id: 2, question: "Cricket Ground - I never bat, I never bowl, Yet I watch each wicket and every goal. Steps climb high in steady lines, Where cheers grow loud at thrilling times.", answer: "Cricket Ground Seating Area" },
+    { id: 1, question: "I am not a classroom, yet all must pass. Morning rush and evening mass. Guarded strong where journeys start, Through me begins your campus part.", answer: "Main Gate" },
+    { id: 2, question: "I never bat, I never bowl, Yet I watch each wicket and every goal. Steps climb high in steady lines, Where cheers grow loud at thrilling times.", answer: "Cricket Ground Seating Area" },
     { id: 3, question: "Find the place where business meets law. A tall red sign will guide what you saw. Not a classroom, yet it shows the way, To minds at work both night and day.", answer: "LC-1 Sign Board" },
     { id: 4, question: "When your wallet is empty and hopes are high, Follow the path of fancy stones. To the machine that eats cards and spits notes.", answer: "ATM" },
     { id: 5, question: "Food and water in name I claim, Seek the tent that shares the same. Beneath the colors overhead, Your next direction waits to be read.", answer: "Dana Pani Tent" },
