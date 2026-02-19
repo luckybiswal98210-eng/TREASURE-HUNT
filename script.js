@@ -44,6 +44,38 @@ function getOrderIds() {
     return orderedQuestions.map((item) => Number(item.id));
 }
 
+function cleanupInvalidProgress(storage) {
+    if (!storage) return;
+
+    try {
+        for (let i = storage.length - 1; i >= 0; i--) {
+            const key = storage.key(i);
+            if (!key || !key.startsWith('huntProgress:')) continue;
+            const raw = storage.getItem(key);
+            if (!raw) {
+                storage.removeItem(key);
+                continue;
+            }
+
+            if (raw.length > 5000) {
+                storage.removeItem(key);
+                continue;
+            }
+
+            try {
+                const parsed = JSON.parse(raw);
+                if (!parsed || parsed.version !== PROGRESS_VERSION) {
+                    storage.removeItem(key);
+                }
+            } catch {
+                storage.removeItem(key);
+            }
+        }
+    } catch (error) {
+        console.warn('Progress cleanup skipped:', error);
+    }
+}
+
 function saveProgress() {
     const payload = {
         version: PROGRESS_VERSION,
@@ -51,14 +83,17 @@ function saveProgress() {
         orderIds: getOrderIds()
     };
     try {
-        sessionStorage.setItem(getProgressStorageKey(), JSON.stringify(payload));
+        localStorage.setItem(getProgressStorageKey(), JSON.stringify(payload));
+        // Remove any session copy to keep single source of truth.
+        sessionStorage.removeItem(getProgressStorageKey());
     } catch (error) {
         console.warn('Progress save skipped due to storage limits:', error);
     }
 }
 
 function restoreProgress() {
-    const saved = sessionStorage.getItem(getProgressStorageKey());
+    const key = getProgressStorageKey();
+    const saved = localStorage.getItem(key) || sessionStorage.getItem(key);
     if (!saved) return;
 
     try {
@@ -96,7 +131,9 @@ function restoreProgress() {
 }
 
 function clearProgress() {
-    sessionStorage.removeItem(getProgressStorageKey());
+    const key = getProgressStorageKey();
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
 }
 
 // Initialize on page load
@@ -117,6 +154,8 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Build question order for this team
         shuffleQuestions();
+        cleanupInvalidProgress(localStorage);
+        cleanupInvalidProgress(sessionStorage);
         restoreProgress();
         
         // Setup listeners
