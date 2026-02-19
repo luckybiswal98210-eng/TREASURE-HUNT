@@ -205,16 +205,17 @@ function parseMultipartBody(contentType, bodyBuffer) {
       const filenameMatch = dispositionLine.match(/filename="([^"]*)"/i);
       const name = nameMatch ? nameMatch[1] : '';
       const fileName = filenameMatch ? filenameMatch[1] : '';
+      const typeLine = headerText
+        .split('\r\n')
+        .find((line) => line.toLowerCase().startsWith('content-type:'));
+      const mimeType = typeLine ? typeLine.split(':')[1].trim().toLowerCase() : '';
+      const isLikelyFilePart = Boolean(typeLine) || name === 'photo' || !!fileName;
 
-      if (fileName) {
-        const typeLine = headerText
-          .split('\r\n')
-          .find((line) => line.toLowerCase().startsWith('content-type:'));
-        const mimeType = typeLine ? typeLine.split(':')[1].trim().toLowerCase() : 'application/octet-stream';
+      if (isLikelyFilePart) {
         file = {
           fieldName: name || 'photo',
-          filename: fileName,
-          mimeType,
+          filename: fileName || 'camera-photo',
+          mimeType: mimeType || 'application/octet-stream',
           buffer: partBuffer
         };
       } else if (name) {
