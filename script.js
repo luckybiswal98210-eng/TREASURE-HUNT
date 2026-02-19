@@ -42,7 +42,8 @@ function getProgressStorageKey() {
 function saveProgress() {
     const payload = {
         currentQuestionIndex,
-        formData
+        formData,
+        orderedQuestions
     };
     localStorage.setItem(getProgressStorageKey(), JSON.stringify(payload));
 }
@@ -53,6 +54,9 @@ function restoreProgress() {
 
     try {
         const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed.orderedQuestions) && parsed.orderedQuestions.length === orderedQuestions.length) {
+            orderedQuestions = parsed.orderedQuestions;
+        }
         const savedIndex = Number(parsed.currentQuestionIndex);
         const maxIndex = orderedQuestions.length;
         if (Number.isFinite(savedIndex) && savedIndex >= 0 && savedIndex <= maxIndex) {
@@ -118,9 +122,8 @@ function shuffleQuestions() {
     const lastClue = clueQuestions.find((q) => q.id === FIXED_LAST_CLUE_ID);
     const shufflePool = clueQuestions.filter((q) => q.id !== FIXED_LAST_CLUE_ID);
 
-    const seed = parseInt(teamId, 10) * 12345;
     for (let i = shufflePool.length - 1; i > 0; i--) {
-        const j = Math.abs((seed + i) * 9973) % (i + 1);
+        const j = Math.floor(Math.random() * (i + 1));
         [shufflePool[i], shufflePool[j]] = [shufflePool[j], shufflePool[i]];
     }
 

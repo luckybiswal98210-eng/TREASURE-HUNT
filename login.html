@@ -124,39 +124,6 @@
             animation: slideIn 0.3s ease-out;
         }
 
-        .team-list {
-            background: #f8f9ff;
-            padding: 20px;
-            border-radius: 8px;
-            margin-top: 30px;
-            font-size: 12px;
-            color: #666;
-        }
-
-        .team-list h3 {
-            color: #667eea;
-            margin-bottom: 10px;
-            font-size: 13px;
-        }
-
-        .teams-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-        }
-
-        .team-item {
-            background: white;
-            padding: 8px;
-            border-radius: 4px;
-            text-align: center;
-            border: 1px solid #e0e0e0;
-        }
-
-        .team-item strong {
-            color: #667eea;
-        }
-
         @media (max-width: 600px) {
             .login-container {
                 padding: 40px 25px;
@@ -166,9 +133,6 @@
                 font-size: 24px;
             }
 
-            .teams-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
         }
     </style>
 </head>
@@ -209,11 +173,6 @@
             <button type="submit" class="login-btn">🚀 Start Treasure Hunt</button>
         </form>
 
-        <!-- Team List -->
-        <div class="team-list">
-            <h3>📋 Sample Team Credentials:</h3>
-            <div class="teams-grid" id="sampleTeams"></div>
-        </div>
     </div>
 
     <script>
@@ -245,8 +204,6 @@
                         ...teamRecord
                     };
                 });
-                
-                displaySampleTeams();
             } catch (error) {
                 console.error('Error loading credentials:', error);
                 showError('Error loading team credentials. Please refresh the page.');
@@ -292,24 +249,6 @@
             const errorDiv = document.getElementById('errorMessage');
             errorDiv.textContent = message;
             errorDiv.classList.add('show');
-        }
-
-        // Display sample team credentials
-        function displaySampleTeams() {
-            const sampleTeamsDiv = document.getElementById('sampleTeams');
-            const sampleIndices = [1, 2, 3, 4, 5, 6];
-            
-            sampleIndices.forEach(i => {
-                const teamItem = document.createElement('div');
-                teamItem.className = 'team-item';
-                if (allTeams[i]) {
-                    teamItem.innerHTML = `
-                        <strong>Team ${i}</strong><br>
-                        <small>${allTeams[i].password}</small>
-                    `;
-                }
-                sampleTeamsDiv.appendChild(teamItem);
-            });
         }
 
         // Initialize
