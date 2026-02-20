@@ -3,6 +3,7 @@ const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
 const Busboy = require('busboy');
+const { v2: cloudinary } = require('cloudinary');
 const { MongoClient } = require('mongodb');
 
 const PORT = process.env.PORT || 3000;
@@ -16,6 +17,10 @@ const MONGODB_URI = process.env.MONGODB_URI || '';
 const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'campus_hunt';
 const MONGODB_COLLECTION = process.env.MONGODB_COLLECTION || 'submissions';
 const ADMIN_RESET_TOKEN = process.env.ADMIN_RESET_TOKEN || '';
+const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME || '';
+const CLOUDINARY_API_KEY = process.env.CLOUDINARY_API_KEY || '';
+const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET || '';
+const CLOUDINARY_FOLDER = process.env.CLOUDINARY_FOLDER || 'campus-hunt';
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -32,9 +37,21 @@ const MIME_TYPES = {
 
 const DATA_URL_PATTERN = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/;
 const USE_MONGO = Boolean(MONGODB_URI);
+const CLOUDINARY_ENABLED = Boolean(
+  CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET
+);
 
 let mongoClient;
 let submissionsCollection;
+
+if (CLOUDINARY_ENABLED) {
+  cloudinary.config({
+    cloud_name: CLOUDINARY_CLOUD_NAME,
+    api_key: CLOUDINARY_API_KEY,
+    api_secret: CLOUDINARY_API_SECRET,
+    secure: true
+  });
+}
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -228,6 +245,49 @@ function parseBoolean(value, defaultValue = true) {
   return defaultValue;
 }
 
+function inferCloudinaryFormat(mimeType, fileName) {
+  const mime = String(mimeType || '').toLowerCase();
+  if (mime === 'image/jpeg' || mime === 'image/jpg') return 'jpg';
+  if (mime === 'image/png') return 'png';
+  if (mime === 'image/webp') return 'webp';
+  if (mime === 'image/gif') return 'gif';
+  if (mime === 'image/heic') return 'heic';
+  if (mime === 'image/heif') return 'heif';
+
+  const ext = path.extname(String(fileName || '')).toLowerCase().replace('.', '');
+  if (['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif'].includes(ext)) {
+    return ext === 'jpeg' ? 'jpg' : ext;
+  }
+  return 'jpg';
+}
+
+async function uploadPhotoToCloudinary(photoBuffer, mimeType, originalPhotoName, safeTeam, safeQuestion, now) {
+  const format = inferCloudinaryFormat(mimeType, originalPhotoName);
+  const publicId = `${CLOUDINARY_FOLDER}/team${safeTeam}/q${safeQuestion}-${now.getTime()}`;
+
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        resource_type: 'image',
+        public_id: publicId,
+        format,
+        overwrite: true
+      },
+      (error, result) => {
+        if (error || !result) {
+          reject(error || new Error('Cloudinary upload failed'));
+          return;
+        }
+        resolve({
+          url: result.secure_url,
+          publicId: result.public_id
+        });
+      }
+    );
+    stream.end(photoBuffer);
+  });
+}
+
 async function handleSubmission(req, res) {
   const contentType = String(req.headers['content-type'] || '').toLowerCase();
   let payload;
@@ -291,15 +351,30 @@ async function handleSubmission(req, res) {
       photoPath: ''
     };
 
-    if (USE_MONGO) {
+    if (CLOUDINARY_ENABLED) {
+      const uploaded = await uploadPhotoToCloudinary(
+        photoBuffer,
+        photoMimeType,
+        originalPhotoName,
+        safeTeam,
+        safeQuestion,
+        now
+      );
+      record.photoPath = uploaded.url;
+      record.photoPublicId = uploaded.publicId;
+    } else if (USE_MONGO) {
       const safeMime = String(photoMimeType || '').startsWith('image/')
         ? String(photoMimeType).toLowerCase()
         : 'image/jpeg';
       record.photoPath = `data:${safeMime};base64,${photoBuffer.toString('base64')}`;
-      await submissionsCollection.insertOne(record);
     } else {
       await fsp.writeFile(filePath, photoBuffer);
       record.photoPath = `/uploads/${fileName}`;
+    }
+
+    if (USE_MONGO) {
+      await submissionsCollection.insertOne(record);
+    } else {
       const submissions = await readSubmissions();
       submissions.push(record);
       await writeSubmissions(submissions);
@@ -365,13 +440,33 @@ async function removeAllUploadedFiles() {
   }
 }
 
+async function removeCloudinaryFilesFromRecords(records) {
+  if (!CLOUDINARY_ENABLED || !Array.isArray(records) || !records.length) return;
+
+  const publicIds = records
+    .map((item) => String(item.photoPublicId || ''))
+    .filter(Boolean);
+
+  if (!publicIds.length) return;
+
+  await Promise.allSettled(
+    publicIds.map((publicId) =>
+      cloudinary.uploader.destroy(publicId, { resource_type: 'image', invalidate: true })
+    )
+  );
+}
+
 async function resetAllSubmissions() {
+  let existing = [];
   if (USE_MONGO) {
+    existing = await submissionsCollection.find({}, { projection: { photoPublicId: 1 } }).toArray();
     await submissionsCollection.deleteMany({});
   } else {
+    existing = await readSubmissions();
     await writeSubmissions([]);
   }
 
+  await removeCloudinaryFilesFromRecords(existing);
   await removeAllUploadedFiles();
 }
 
