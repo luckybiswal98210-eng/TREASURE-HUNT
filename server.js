@@ -275,8 +275,6 @@ async function handleSubmission(req, res) {
   const filePath = path.join(UPLOADS_DIR, fileName);
 
   try {
-    await fsp.writeFile(filePath, photoBuffer);
-
     const id = await nextSubmissionId();
     const record = {
       id,
@@ -290,12 +288,18 @@ async function handleSubmission(req, res) {
       createdAt: now.toISOString(),
       originalPhotoName: String(originalPhotoName || 'camera-photo'),
       photoMimeType: String(photoMimeType || ''),
-      photoPath: `/uploads/${fileName}`
+      photoPath: ''
     };
 
     if (USE_MONGO) {
+      const safeMime = String(photoMimeType || '').startsWith('image/')
+        ? String(photoMimeType).toLowerCase()
+        : 'image/jpeg';
+      record.photoPath = `data:${safeMime};base64,${photoBuffer.toString('base64')}`;
       await submissionsCollection.insertOne(record);
     } else {
+      await fsp.writeFile(filePath, photoBuffer);
+      record.photoPath = `/uploads/${fileName}`;
       const submissions = await readSubmissions();
       submissions.push(record);
       await writeSubmissions(submissions);
