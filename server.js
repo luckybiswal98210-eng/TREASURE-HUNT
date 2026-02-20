@@ -319,7 +319,14 @@ async function handleGetSubmissions(req, res, urlObj) {
 
     if (USE_MONGO) {
       const query = filterTeamId ? { teamId: String(filterTeamId) } : {};
-      filtered = await submissionsCollection.find(query).sort({ id: 1 }).toArray();
+      const items = await submissionsCollection.find(query).sort({ id: 1 }).toArray();
+      filtered = items.map((item) => {
+        const photoCandidate = item.photoPath || item.photoDataUrl || item.photo || item.imageDataUrl || '';
+        return {
+          ...item,
+          photoPath: String(photoCandidate || '')
+        };
+      });
     } else {
       const submissions = await readSubmissions();
       filtered = filterTeamId
