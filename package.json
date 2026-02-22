@@ -4,7 +4,6 @@
   "private": true,
   "dependencies": {
     "busboy": "^1.6.0",
-    "cloudinary": "^2.6.0",
     "mongodb": "^6.13.0"
   },
   "scripts": {
